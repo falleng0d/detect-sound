@@ -1,0 +1,7 @@
+pyautogui
+click
+rich
+questionary
+sounddevice
+pygetwindow
+pynput
