@@ -2,6 +2,10 @@
 
 Python application that listens to audio input and performs actions based on the volume level. It includes a cooldown decorator and throttling logic to prevent the callback from being executed too frequently.
 
+TLDR: It listens to the microphone and executes a callback when the volume level exceeds a certain threshold. The callback is throttled to prevent it from being executed too frequently.
+
+![Detect Sound](./window.png)
+
 ## Setting up venv
 
 To set up a virtual environment for the project, follow these steps:
