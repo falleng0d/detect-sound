@@ -126,6 +126,14 @@ class Listener:
 		self._stream.start()
 		self._listening = True
 
+		click.echo(
+			click.style(
+				f"Listening started with "
+				f"{self.threshold=} {self.time_threshold=} {self.time_expired=}",
+				fg="green",
+			)
+		)
+
 	def stop_listening(self):
 		self._listening = False
 		self._stream.stop()
