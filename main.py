@@ -31,6 +31,14 @@ class Listener:
 	def listening(self):
 		return self._listening
 
+	@property
+	def last_volume_tick(self):
+		return (
+			self.last_volume_ticks[-1]
+			if self._listening and len(self.last_volume_ticks) > 0
+			else 0
+		)
+
 	def __init__(self):
 		self.oldest_succesfull_check_time: float | None = None
 		self.succesfull_check_times: list[float] = []
@@ -136,6 +144,10 @@ class Listener:
 
 	def stop_listening(self):
 		self._listening = False
+
+		if self._stream is None:
+			return
+
 		self._stream.stop()
 		self._stream.close()
 		self._stream = None
