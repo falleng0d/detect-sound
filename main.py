@@ -106,7 +106,7 @@ class Listener:
 			)
 			callback()
 
-	def with_config(self, config: ListenerConfing):
+	def configure(self, config: ListenerConfing):
 		self.threshold = config.threshold
 		self.time_threshold = config.time_threshold
 		self.time_expired = config.time_expired
@@ -116,7 +116,7 @@ class Listener:
 			raise ValueError("Already listening")
 
 		if config:
-			self.with_config(config)
+			self.configure(config)
 
 		self._stream = sd.InputStream(
 			device=self.input_device_id,
