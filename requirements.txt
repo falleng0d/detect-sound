@@ -1,7 +1,11 @@
-pyautogui
-click
+pyautogui~=0.9.54
+click~=8.1.7
 rich
 questionary
-sounddevice
+sounddevice~=0.4.6
 pygetwindow
 pynput
+
+numpy==1.26.4
+pystray~=0.19.5
+pillow~=10.2.0

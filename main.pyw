@@ -3,6 +3,8 @@ from tkinter import scrolledtext
 from functools import partial
 
 import sys
+from pystray import Icon as TrayIcon, MenuItem as item, Menu as menu
+from PIL import Image
 
 original_stdout = sys.stdout  # Save a reference to the original standard output
 from main import Listener, press_key_callback
@@ -12,6 +14,9 @@ class Application(tk.Tk):
 	def __init__(self):
 		super().__init__()
 		self.title("Detect Sound")
+		self.iconbitmap("app.ico")
+
+		self.tray_icon: TrayIcon = None
 
 		self.listener = Listener()
 		self.listener_thread = None
@@ -21,10 +26,13 @@ class Application(tk.Tk):
 		self.minsize(self.winfo_width(), self.winfo_height())  # Set minimum window size
 
 		sys.stdout = TextRedirector(self.log_box)
+		self.override_minimize()
 
 	def create_widgets(self):
 		self.log_box = scrolledtext.ScrolledText(self, state="disabled", height=10)
-		self.log_box.grid(row=0, column=0, columnspan=1, sticky="ew")
+		self.log_box.grid(row=0, column=0, columnspan=1, sticky="nsew")
+		self.grid_rowconfigure(0, weight=1)
+		self.grid_columnconfigure(0, weight=1)
 
 		self.toggle_button = tk.Button(
 			self, text="Start Listening", command=self.toggle_listening
@@ -66,6 +74,36 @@ class Application(tk.Tk):
 		self.log_box.insert(tk.END, message + "\n")
 		self.log_box.configure(state="disabled")
 		self.log_box.yview(tk.END)
+
+	def create_system_tray_icon(self):
+		# Load icon from app.ico
+		icon_image = Image.open("app.ico")
+
+		# Create the system tray icon
+		self.tray_icon = TrayIcon(
+			name="Detect Sound",
+			icon=icon_image.resize((32, 32)),
+			menu=menu(
+				item("Show", self.restore_from_tray, default=True),
+				item("Exit", self.destroy),
+			),
+		)
+
+	def restore_from_tray(self):
+		self.tray_icon.stop()
+		self.deiconify()  # Show the window
+
+	def on_minimize(self):
+		self.create_system_tray_icon()
+		self.withdraw()  # Hide the window
+		self.tray_icon.run()
+
+	def destroy(self):
+		self.tray_icon.stop()
+		super().destroy()
+
+	def override_minimize(self):
+		self.protocol("WM_DELETE_WINDOW", self.on_minimize)
 
 
 class TextRedirector(object):
