@@ -5,11 +5,9 @@ from typing import Callable, Optional
 import click
 import numpy as np
 import sounddevice as sd
-import threading
 import time
 import pyautogui
 
-from pynput import keyboard
 
 from cooldown import cooldown
 
@@ -29,13 +27,17 @@ class Listener:
 		time_threshold: float
 		time_expired: float
 
+	@property
+	def listening(self):
+		return self._listening
+
 	def __init__(self):
 		self.oldest_succesfull_check_time: float | None = None
 		self.succesfull_check_times: list[float] = []
 		self.last_volume_ticks: list[float] = []
-		self.listening = False
-		self.audio_handler_enabled = True
-		self.input_device_id = get_default_input_device_name()
+
+		self._listening = False
+		self._stream: sd.InputStream | None = None
 
 		# The `audio_callback` method should only call the `callback` method if the
 		# threshold is higher than the volume for at least TIME_THRESHOLD second.
@@ -43,8 +45,10 @@ class Listener:
 		self.time_threshold = 0.08
 		self.time_expired = 0.2
 
+		self.input_device_id = get_default_input_device_name()
+
 	def audio_handler(self, callback: Callable, indata, *_):
-		if not self.audio_handler_enabled:
+		if not self._listening:
 			return
 
 		volume_norm = np.linalg.norm(indata) * 10
@@ -108,49 +112,42 @@ class Listener:
 		self.time_expired = config.time_expired
 
 	def listen(self, callback: Callable, config: Optional[ListenerConfing] = None):
-		self.listening = True
-		self.audio_handler_enabled = True
+		if self.listening:
+			raise ValueError("Already listening")
 
 		if config:
 			self.with_config(config)
 
-		while self.listening:
-			stream = sd.InputStream(
-				device=self.input_device_id,
-				callback=functools.partial(self.audio_handler, callback),
-			)
-			with stream:
-				sd.sleep(60000)
+		self._stream = sd.InputStream(
+			device=self.input_device_id,
+			callback=functools.partial(self.audio_handler, callback),
+		)
+
+		self._stream.start()
+		self._listening = True
+
+	def stop_listening(self):
+		self._listening = False
+		self._stream.stop()
+		self._stream.close()
+		self._stream = None
 
 
-def toggle_listening_on_hotkey(key_char: str, listener: Listener):
-	def on_press(key):
-		if key == keyboard.KeyCode.from_char(key_char):
-			listener.audio_handler_enabled = not listener.audio_handler_enabled
-			click.echo(
-				click.style(
-					f"\raudio_handler_enabled is now {listener.audio_handler_enabled}",
-					fg="yellow",
-				)
-			)
-
-	def listener_callback():
-		with keyboard.Listener(on_press=on_press) as listener:
-			listener.join()
-
-	listener_thread = threading.Thread(target=listener_callback)
-	listener_thread.start()
+@cooldown(0.3)
+def press_key_callback(key: str):
+	# press page down key
+	pyautogui.press(key)
+	# print a colored message to the console
+	click.echo(click.style("Callback function executed", fg="green"))
 
 
 if __name__ == "__main__":
-
-	@cooldown(0.3)
-	def callback():
-		# press page down key
-		pyautogui.press("pagedown")
-		# print a colored message to the console
-		click.echo(click.style("Callback function executed", fg="green"))
-
 	listener = Listener()
-	toggle_listening_on_hotkey(key_char="a", listener=listener)
-	listener.listen(callback)
+	listener.listen(functools.partial(press_key_callback, "pagedown"))
+
+	try:
+		while listener.listening:
+			time.sleep(0.1)
+	except KeyboardInterrupt:
+		listener.stop_listening()
+		print("Listener stopped")
