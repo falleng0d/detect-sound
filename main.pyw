@@ -6,6 +6,8 @@ import sys
 from pystray import Icon as TrayIcon, MenuItem as item, Menu as menu
 from PIL import Image
 
+from easysettings import EasySettings
+
 original_stdout = sys.stdout  # Save a reference to the original standard output
 from main import Listener, press_key_callback
 
@@ -16,6 +18,7 @@ class Application(tk.Tk):
 		self.title("Detect Sound")
 		self.iconbitmap("app.ico")
 
+		self.settings = EasySettings("app_settings.conf")
 		self.tray_icon: TrayIcon = None
 
 		self.listener = Listener()
@@ -44,7 +47,34 @@ class Application(tk.Tk):
 
 		self.key_entry = tk.Entry(self)
 		self.key_entry.grid(row=3, column=0, sticky="ew")
-		self.key_entry.insert(0, "pagedown")
+		self.key_entry.insert(0, self.settings.get("key", "pagedown"))
+
+		self.threshold_label = tk.Label(self, text="Threshold:")
+		self.threshold_label.grid(row=4, column=0, sticky="w")
+		self.threshold_entry = tk.Scale(self, from_=1, to=100, orient="horizontal")
+		self.threshold_entry.grid(row=5, column=0, sticky="ew")
+		self.threshold_entry.set(self.settings.get("threshold", "25.0"))
+
+		self.time_threshold_label = tk.Label(self, text="Time Threshold:")
+		self.time_threshold_label.grid(row=6, column=0, sticky="w")
+		self.time_threshold_entry = tk.Spinbox(self, from_=0, to=1, increment=0.01)
+		self.time_threshold_entry.grid(row=7, column=0, sticky="ew")
+		self.time_threshold_entry.delete(0, "end")
+		self.time_threshold_entry.insert(0, self.settings.get("time_threshold", "0.08"))
+
+		self.time_expired_label = tk.Label(self, text="Time Expired:")
+		self.time_expired_label.grid(row=8, column=0, sticky="w")
+		self.time_expired_entry = tk.Spinbox(self, from_=0, to=1, increment=0.01)
+		self.time_expired_entry.grid(row=9, column=0, sticky="ew")
+		self.time_expired_entry.delete(0, "end")
+		self.time_expired_entry.insert(0, self.settings.get("time_expired", "0.20"))
+
+	def save_settings(self):
+		self.settings.set("key", self.key_entry.get())
+		self.settings.set("threshold", self.threshold_entry.get())
+		self.settings.set("time_threshold", self.time_threshold_entry.get())
+		self.settings.set("time_expired", self.time_expired_entry.get())
+		self.settings.save()
 
 	def toggle_listening(self):
 		if self.listener.listening:
@@ -54,20 +84,34 @@ class Application(tk.Tk):
 			self.key_entry.config(
 				state="normal"
 			)  # Enable key_entry when listening stops
+			self.threshold_entry.config(state="normal")
+			self.time_threshold_entry.config(state="normal")
+			self.time_expired_entry.config(state="normal")
 			self.log("Listening stopped.")
 		else:
 			self.start_listening_thread()
 
+			self.save_settings()
+
 			self.toggle_button.config(text="Stop Listening")
 			self.key_entry.config(
-				state="disabled"
-			)  # Disable key_entry when listening starts
+				state="disabled",
+			)
+			self.threshold_entry.config(state="disabled")
+			self.time_threshold_entry.config(state="disabled")
+			self.time_expired_entry.config(state="disabled")
+
 			self.log("Listening started.")
 
 	def start_listening_thread(self):
-		key = self.key_entry.get()
-		callback = partial(press_key_callback, key)
-		self.listener.listen(callback)
+		threshold = float(self.threshold_entry.get())
+		time_threshold = float(self.time_threshold_entry.get())
+		time_expired = float(self.time_expired_entry.get())
+		config = Listener.ListenerConfing(
+			threshold=threshold, time_threshold=time_threshold, time_expired=time_expired
+		)
+		callback = partial(press_key_callback, self.key_entry.get())
+		self.listener.listen(callback, config)
 
 	def log(self, message):
 		self.log_box.configure(state="normal")
