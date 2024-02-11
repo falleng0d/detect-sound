@@ -1,6 +1,5 @@
-import contextlib
 import tkinter as tk
-from tkinter import scrolledtext
+from tkinter import scrolledtext, ttk
 from functools import partial
 
 import sys
@@ -14,6 +13,30 @@ original_stdout = sys.stdout  # Save a reference to the original standard output
 from main import Listener, press_key_callback
 
 
+class ThresholdProgressbar(tk.Frame):
+	def __init__(self, parent, maximum, threshold, **kwargs):
+		super().__init__(parent, **kwargs)
+		self.maximum = maximum
+		self.threshold = threshold
+
+		self.volume_bar = ttk.Progressbar(self, maximum=self.maximum)
+		self.volume_bar.pack(fill="x")
+
+		self.threshold_bar = ttk.Progressbar(
+			self, maximum=self.maximum, mode="determinate"
+		)
+		self.threshold_bar.pack(fill="x")
+
+		self.threshold_bar["value"] = self.threshold
+		self.threshold_bar.state(["disabled"])  # This makes the threshold bar grayed out
+
+	def update_volume(self, value):
+		self.volume_bar["value"] = value
+
+	def update_threshold(self, value):
+		self.threshold_bar["value"] = value
+
+
 class Application(tk.Tk):
 	def __init__(self):
 		super().__init__()
@@ -25,14 +48,16 @@ class Application(tk.Tk):
 
 		self.listener = Listener()
 		self.listener_thread = None
+		self.hotkey = self.settings.get("keyboard_shortcut", "a")
 
 		self.create_widgets()
 		self.update()  # Update the window to make sure all widgets are accounted for
-		self.bind_keyboard_shortcuts()
 		self.minsize(self.winfo_width(), self.winfo_height())  # Set minimum window size
 
 		sys.stdout = TextRedirector(self.log_box)
 		self.override_minimize()
+
+		self.handle_toggle_listening_hotkey()
 
 	def create_widgets(self):
 		self.log_box = scrolledtext.ScrolledText(self, state="disabled", height=10)
@@ -81,29 +106,26 @@ class Application(tk.Tk):
 			"<FocusOut>", lambda e: self.rebind_keyboard_shortcuts()
 		)
 
+		self.progress_bar = ThresholdProgressbar(
+			self, maximum=100, threshold=self.threshold_entry.get()
+		)
+		self.progress_bar.grid(row=12, column=0, sticky="ew")
+
 	def rebind_keyboard_shortcuts(self):
 		old_shortcut = self.settings.get("keyboard_shortcut", "a")
-
-		with contextlib.suppress(KeyError):
-			keyboard.remove_hotkey(old_shortcut)
-
 		new_shortcut = self.shortcut_entry.get()
 
-		try:
-			keyboard.add_hotkey(new_shortcut, self.toggle_listening)
-		except ValueError:
-			print(f"Failed to bind keyboard shortcut {new_shortcut}")
+		if old_shortcut == new_shortcut:
 			return
 
-		if old_shortcut != new_shortcut:
-			self.settings.set("keyboard_shortcut", new_shortcut)
-			print(f"Rebound keyboard shortcut to {new_shortcut}")
+		self.hotkey = new_shortcut
 
-	def bind_keyboard_shortcuts(self):
-		keyboard.add_hotkey(self.shortcut_entry.get(), self.toggle_listening)
+	def handle_toggle_listening_hotkey(self):
+		keyboard.on_press(
+			lambda k: self.toggle_listening() if k.name == self.hotkey else None
+		)
 
-	def unbind_keyboard_shortcuts(self):
-		keyboard.remove_hotkey(self.shortcut_entry.get())
+		print(f"Bound keyboard shortcut to {self.hotkey}")
 
 	def save_settings(self):
 		self.settings.set("key", self.key_entry.get())
@@ -129,8 +151,6 @@ class Application(tk.Tk):
 		else:
 			self.start_listening_thread()
 
-			self.save_settings()
-
 			self.toggle_button.config(text="Stop Listening")
 			self.key_entry.config(
 				state="disabled",
@@ -140,7 +160,13 @@ class Application(tk.Tk):
 			self.shortcut_entry.config(state="disabled")
 			self.time_expired_entry.config(state="disabled")
 
+			self.save_settings()
 			self.log("Listening started.")
+
+	def update_progress_bar(self):
+		self.progress_bar.update_volume(self.listener.last_volume_tick)
+		self.progress_bar.update_threshold(self.threshold_entry.get())
+		self.after(30, self.update_progress_bar)  # Update every 100 ms
 
 	def start_listening_thread(self):
 		threshold = float(self.threshold_entry.get())
@@ -151,6 +177,7 @@ class Application(tk.Tk):
 		)
 		callback = partial(press_key_callback, self.key_entry.get())
 		self.listener.listen(callback, config)
+		self.update_progress_bar()
 
 	def log(self, message):
 		self.log_box.configure(state="normal")
@@ -174,6 +201,7 @@ class Application(tk.Tk):
 
 	def restore_from_tray(self):
 		self.tray_icon.stop()
+		self.tray_icon = None
 		self.deiconify()  # Show the window
 
 	def on_minimize(self):
@@ -182,7 +210,11 @@ class Application(tk.Tk):
 		self.tray_icon.run()
 
 	def destroy(self):
-		self.tray_icon.stop()
+		self.settings.save()
+
+		if self.tray_icon is not None:
+			self.tray_icon.stop()
+
 		super().destroy()
 
 	def override_minimize(self):
@@ -206,5 +238,11 @@ class TextRedirector(object):
 
 
 if __name__ == "__main__":
-	app = Application()
-	app.mainloop()
+	try:
+		app = Application()
+		app.mainloop()
+	except KeyboardInterrupt:
+		app.listener.stop_listening()
+		app.destroy()
+		print("Listener stopped")
+		sys.exit(0)
