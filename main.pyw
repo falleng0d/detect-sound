@@ -1,8 +1,10 @@
+import contextlib
 import tkinter as tk
 from tkinter import scrolledtext
 from functools import partial
 
 import sys
+import keyboard
 from pystray import Icon as TrayIcon, MenuItem as item, Menu as menu
 from PIL import Image
 
@@ -26,6 +28,7 @@ class Application(tk.Tk):
 
 		self.create_widgets()
 		self.update()  # Update the window to make sure all widgets are accounted for
+		self.bind_keyboard_shortcuts()
 		self.minsize(self.winfo_width(), self.winfo_height())  # Set minimum window size
 
 		sys.stdout = TextRedirector(self.log_box)
@@ -69,6 +72,39 @@ class Application(tk.Tk):
 		self.time_expired_entry.delete(0, "end")
 		self.time_expired_entry.insert(0, self.settings.get("time_expired", "0.20"))
 
+		self.shortcut_label = tk.Label(self, text="Keyboard Shortcut:")
+		self.shortcut_label.grid(row=10, column=0, sticky="w")
+		self.shortcut_entry = tk.Entry(self)
+		self.shortcut_entry.grid(row=11, column=0, sticky="ew")
+		self.shortcut_entry.insert(0, self.settings.get("keyboard_shortcut", "a"))
+		self.shortcut_entry.bind(
+			"<FocusOut>", lambda e: self.rebind_keyboard_shortcuts()
+		)
+
+	def rebind_keyboard_shortcuts(self):
+		old_shortcut = self.settings.get("keyboard_shortcut", "a")
+
+		with contextlib.suppress(KeyError):
+			keyboard.remove_hotkey(old_shortcut)
+
+		new_shortcut = self.shortcut_entry.get()
+
+		try:
+			keyboard.add_hotkey(new_shortcut, self.toggle_listening)
+		except ValueError:
+			print(f"Failed to bind keyboard shortcut {new_shortcut}")
+			return
+
+		if old_shortcut != new_shortcut:
+			self.settings.set("keyboard_shortcut", new_shortcut)
+			print(f"Rebound keyboard shortcut to {new_shortcut}")
+
+	def bind_keyboard_shortcuts(self):
+		keyboard.add_hotkey(self.shortcut_entry.get(), self.toggle_listening)
+
+	def unbind_keyboard_shortcuts(self):
+		keyboard.remove_hotkey(self.shortcut_entry.get())
+
 	def save_settings(self):
 		self.settings.set("key", self.key_entry.get())
 		self.settings.set("threshold", self.threshold_entry.get())
@@ -87,6 +123,8 @@ class Application(tk.Tk):
 			self.threshold_entry.config(state="normal")
 			self.time_threshold_entry.config(state="normal")
 			self.time_expired_entry.config(state="normal")
+			self.shortcut_entry.config(state="normal")
+
 			self.log("Listening stopped.")
 		else:
 			self.start_listening_thread()
@@ -99,6 +137,7 @@ class Application(tk.Tk):
 			)
 			self.threshold_entry.config(state="disabled")
 			self.time_threshold_entry.config(state="disabled")
+			self.shortcut_entry.config(state="disabled")
 			self.time_expired_entry.config(state="disabled")
 
 			self.log("Listening started.")
