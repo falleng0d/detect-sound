@@ -155,8 +155,16 @@ class Listener:
 
 @cooldown(0.3)
 def press_key_callback(key: str):
-	# press page down key
-	pyautogui.press(key)
+	is_mouse_key = key.lower() in {"mleft", "mright", "mmiddle"}
+	if not is_mouse_key:
+		# press the key
+		pyautogui.press(key)
+	else:
+		# remove first character from the key
+		key = key[1:]
+		# press the mouse button
+		pyautogui.click(button=key)
+
 	# print a colored message to the console
 	click.echo(click.style("Callback function executed", fg="green"))
 
