@@ -55,7 +55,7 @@ class Application(tk.Tk):
 		self.minsize(self.winfo_width(), self.winfo_height())  # Set minimum window size
 
 		sys.stdout = TextRedirector(self.log_box)
-		self.override_minimize()
+		# self.override_minimize()
 
 		self.handle_toggle_listening_hotkey()
 
@@ -204,10 +204,10 @@ class Application(tk.Tk):
 		self.tray_icon = None
 		self.deiconify()  # Show the window
 
-	def on_minimize(self):
-		self.create_system_tray_icon()
-		self.withdraw()  # Hide the window
-		self.tray_icon.run()
+	# def on_minimize(self):
+	# 	self.create_system_tray_icon()
+	# 	self.withdraw()  # Hide the window
+	# 	self.tray_icon.run()
 
 	def destroy(self):
 		self.settings.save()
